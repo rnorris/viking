@@ -955,15 +955,46 @@ static void weak_ref_cb(gpointer ptr, GObject * dead_vml)
   g_mutex_unlock(mdi->mutex);
 }
 
+typedef enum {
+	NORTH,
+	EAST,
+	SOUTH,
+	WEST,
+} Direction;
+
 static int map_download_thread ( MapDownloadInfo *mdi, gpointer threaddata )
 {
   void *handle = vik_map_source_download_handle_init(MAPS_LAYER_NTH_TYPE(mdi->maptype));
   guint donemaps = 0;
   gint x, y;
-  for ( x = mdi->x0; x <= mdi->xf; x++ )
-  {
-    for ( y = mdi->y0; y <= mdi->yf; y++ )
-    {
+
+  gint dx = 0;
+  gint dy = 0;
+  gint nn = 1; // Nth direction of spiral change
+
+  gint x_range = mdi->xf - mdi->x0 + 1;
+  gint y_range = mdi->yf - mdi->y0 + 1;
+
+  gint maxsq = (gint) pow((double)MAX(x_range, y_range), 2);
+
+  x = mdi->x0 + x_range/2;
+  y = mdi->y0 + y_range/2;
+
+  Direction direction = WEST;
+
+  // Standard grid transveral
+  //for ( x = mdi->x0; x <= mdi->xf; x++ ) {
+    //for ( y = mdi->y0; y <= mdi->yf; y++ ) {
+
+  // Spiral traversal across grid as we want the maps in the center to download first as these are the important ones
+  //  with zooming in tiles in the middle
+  gint ii;
+  for ( ii = 0; ii < maxsq; ii++ ) {
+
+    // Is tile in bounds?
+    if ( (mdi->x0 <= x) && (x <= mdi->xf) && (mdi->y0 <= y) && (y <= mdi->yf) ) {
+      g_debug("thinking about downloading tile: x=%d, y=%d", x, y);
+
       gboolean remove_mem_cache = FALSE;
       gboolean need_download = FALSE;
       g_snprintf ( mdi->filename_buf, mdi->maxlen, DIRSTRUCTURE,
@@ -971,7 +1002,7 @@ static int map_download_thread ( MapDownloadInfo *mdi, gpointer threaddata )
                      mdi->mapcoord.scale, mdi->mapcoord.z, x, y );
 
       donemaps++;
-      int res = a_background_thread_progress ( threaddata, ((gdouble)donemaps) / mdi->mapstoget ); /* this also calls testcancel */
+      int res = a_background_thread_progress ( threaddata, ((gdouble)donemaps) / mdi->mapstoget ); // this also calls testcancel
       if (res != 0) {
         vik_map_source_download_handle_cleanup(MAPS_LAYER_NTH_TYPE(mdi->maptype), handle);
         return -1;
@@ -981,14 +1012,14 @@ static int map_download_thread ( MapDownloadInfo *mdi, gpointer threaddata )
         need_download = TRUE;
         remove_mem_cache = TRUE;
 
-      } else {  /* in case map file already exists */
+      } else {  // in case map file already exists
         switch (mdi->redownload) {
           case REDOWNLOAD_NONE:
             continue;
 
           case REDOWNLOAD_BAD:
           {
-            /* see if this one is bad or what */
+            // see if this one is bad or what
             GError *gx = NULL;
             GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file ( mdi->filename_buf, &gx );
             if (gx || (!pixbuf)) {
@@ -1009,7 +1040,7 @@ static int map_download_thread ( MapDownloadInfo *mdi, gpointer threaddata )
             break;
 
           case REDOWNLOAD_ALL:
-            /* FIXME: need a better way than to erase file in case of server/network problem */
+            // FIXME: need a better way than to erase file in case of server/network problem
             g_remove ( mdi->filename_buf );
             need_download = TRUE;
             remove_mem_cache = TRUE;
@@ -1035,13 +1066,28 @@ static int map_download_thread ( MapDownloadInfo *mdi, gpointer threaddata )
       if (remove_mem_cache)
           a_mapcache_remove_all_shrinkfactors ( x, y, mdi->mapcoord.z, vik_map_source_get_uniq_id(MAPS_LAYER_NTH_TYPE(mdi->maptype)), mdi->mapcoord.scale );
       if (mdi->refresh_display && mdi->map_layer_alive) {
-        /* TODO: check if it's on visible area */
+        // TODO: check if it's on visible area
         vik_layer_emit_update ( VIK_LAYER(mdi->vml), TRUE ); // Yes update display from background
       }
       g_mutex_unlock(mdi->mutex);
-      mdi->mapcoord.x = mdi->mapcoord.y = 0; /* we're temporarily between downloads */
-
+      mdi->mapcoord.x = mdi->mapcoord.y = 0; // we're temporarily between downloads
     }
+
+    // On nth sequence of iterator change direction
+    // See On-Line Line Encyclopedia of Integer Sequences (OEIS.org)
+    // A00620 'Quarter-squares'
+    if ( ii == floor(pow(nn,2)/4) ) {
+      switch (direction) {
+      case NORTH: direction++; dx = 1; dy = 0; break;
+      case EAST: direction++; dx = 0; dy = 1; break;
+      case SOUTH: direction++; dx = -1; dy = 0; break;
+      default: direction = NORTH; dx = 0; dy = -1; break;
+      }
+      nn++;
+    }
+    // Modify the indexes to next tile using the values determined by the current direction
+    x += dx;
+    y += dy;
   }
   vik_map_source_download_handle_cleanup(MAPS_LAYER_NTH_TYPE(mdi->maptype), handle);
   g_mutex_lock(mdi->mutex);
