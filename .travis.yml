@@ -17,6 +17,10 @@ env:
 #
 # For available build images-> https://docs.travis-ci.com/user/reference/overview/
 #
+# For at least Ubuntu 20.04, something is now including package tz_data (or via python3-tz)
+#  which at time of writing needs specifically setting up:
+   - DEBIAN_FRONTEND=noninteractive
+   - TZ=Europe/London
   matrix:
 # NB Ubuntu 16.04 doesn't have a new enough geoclue so simply disable using it
    - BUILD_IMG=ubuntu:16.04 DEPS="libglib2.0-bin libmapnik-dev" OPTS="--disable-geoclue"
@@ -43,5 +47,5 @@ env:
 #  returns a non-zero exit code, particularly for the case of build dependencies changing and the dependencies in apt-get is out of date
 #  (e.g. gnome-doc-utils no longer available in 20.04, but at time of writing still referred to in apt-get)
 #
-script: docker run --rm=true -v $HOME:$HOME:rw $BUILD_IMG /bin/sh -c "DEBIAN_FRONTEND=noninteractive TZ=Europe/London && sed -i '/^#\sdeb-src /s/^#//' /etc/apt/sources.list && apt-get update && apt-get build-dep --yes viking ; apt-get install --yes $COMMON_DEPS $DEPS && cd $PWD && ./autogen.sh $OPTS && make -j && make -j check && make install"
+script: docker run --rm=true -v $HOME:$HOME:rw $BUILD_IMG /bin/sh -c "sed -i '/^#\sdeb-src /s/^#//' /etc/apt/sources.list && apt-get update && apt-get build-dep --yes viking ; apt-get install --yes $COMMON_DEPS $DEPS && cd $PWD && ./autogen.sh $OPTS && make -j && make -j check && make install"
 # Further packages are installed as these are new dependencies for the latest source code, compared to the dependencies listed in the distribution version (`apt-get build-dep` always refers to the version which is built for the OS rather than the up-to-date source)
