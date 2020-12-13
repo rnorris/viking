@@ -21,6 +21,7 @@ env:
 # NB Ubuntu 16.04 doesn't have a new enough geoclue so simply disable using it
    - BUILD_IMG=ubuntu:16.04 DEPS="libglib2.0-bin libmapnik-dev" OPTS="--disable-geoclue"
    - BUILD_IMG=ubuntu:18.04 DEPS=libglib2.0-dev-bin
+   - BUILD_IMG=ubuntu:20.04 DEPS=libglib2.0-dev-bin
 # Docker images previously (temporarily?) available but have vanished:
 #  - BUILD_IMG=ubuntu:18.10
 #  - BUILD_IMG=ubuntu:19.04
